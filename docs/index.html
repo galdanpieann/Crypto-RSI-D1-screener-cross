@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Simple RSI D1 Cross Screener (≥$1B MC)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121831;
+      --text: #e8ecf1;
+      --muted: #9aa4b2;
+      --good: #2ecc71;
+      --bad: #ff5b6e;
+      --accent: #7aa2f7;
+      --border: #1d2443;
+      --chip: #1a2142;
+    }
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      margin: 0;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 24px auto 72px;
+      padding: 0 16px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .title {
+      font-weight: 700;
+      font-size: 20px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.2) inset, 0 6px 20px rgba(0,0,0,0.25);
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    button {
+      background: var(--accent);
+      color: white;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      background: var(--chip);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    tr:hover td {
+      background: rgba(255,255,255,0.02);
+    }
+    .rowhead {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #8892a7;
+    }
+    .link {
+      color: var(--text);
+      text-decoration: none;
+    }
+    .link:hover {
+      text-decoration: underline;
+    }
+    .tag {
+      color: var(--muted);
+      font-size: 11px;
+      border: 1px solid var(--border);
+      background: var(--chip);
+      padding: 2px 6px;
+      border-radius: 999px;
+    }
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .bn {
+      font-size: 11px;
+      color: var(--accent);
+      text-decoration: none;
+      border: 1px solid var(--accent);
+      padding: 1px 6px;
+      border-radius: 6px;
+    }
+    .bn:hover {
+      background: rgba(122,162,247,0.12);
+    }
+    .error {
+      color: var(--bad);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin-top: 12px;
+    }
+    .time {
+      color: var(--muted);
+      font-size: 12px;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <div class="title">Simple RSI Screener</div>
+        <div class="subtitle">D1 • MC ≥ $1B • RSI(14, close) • Crossed 30/50/70 within last 4 closed days</div>
+      </div>
+      <div class="controls">
+        <button id="runBtn">Scan now</button>
+        <span class="time" id="time"></span>
+      </div>
+    </header>
+
+    <div class="card chips" aria-hidden="true">
+      <span class="chip">Timeframe: D1</span>
+      <span class="chip">Market cap ≥ $1,000,000,000</span>
+      <span class="chip">RSI: 14, source close</span>
+      <span class="chip">Cross: 30 / 50 / 70, any direction, last 4 days</span>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Name</th>
+            <th>Market Cap</th>
+            <th>RSI</th>
+            <th>Crosses (last 4 days)</th>
+            <th>Links</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="6" class="small">Click “Scan now” to fetch data...</td></tr>
+        </tbody>
+      </table>
+      <div id="err" class="error"></div>
+    </div>
+  </div>
+
+  <script>
+    const fmtUSD0 = (n) => n == null ? '-' : '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const nowIso = () => new Date().toISOString().replace('T', ' ').slice(0, 19) + 'Z';
+
+    async function fetchJSON(url, options = {}) {
+      const res = await fetch(url, options);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(res.status + ' ' + res.statusText + ' ' + url + ' ' + txt);
+      }
+      return res.json();
+    }
+
+    // Simple concurrency limiter
+    function pLimit(concurrency = 8) {
+      let active = 0;
+      const queue = [];
+      const next = () => {
+        active--;
+        if (queue.length) queue.shift()();
+      };
+      return (fn) => new Promise((resolve, reject) => {
+        const run = () => {
+          active++;
+          fn().then(resolve, reject).finally(next);
+        };
+        if (active < concurrency) run();
+        else queue.push(run);
+      });
+    }
+
+    // Wilder's RSI(14)
+    function rsi(series, period = 14) {
+      const out = new Array(series.length).fill(null);
+      if (series.length < period + 1) return out;
+      let gains = 0, losses = 0;
+      for (let i = 1; i <= period; i++) {
+        const ch = series[i] - series[i - 1];
+        if (ch > 0) gains += ch; else losses -= ch;
+      }
+      let avgGain = gains / period;
+      let avgLoss = losses / period;
+      out[period] = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+      for (let i = period + 1; i < series.length; i++) {
+        const ch = series[i] - series[i - 1];
+        const gain = ch > 0 ? ch : 0;
+        const loss = ch < 0 ? -ch : 0;
+        avgGain = (avgGain * (period - 1) + gain) / period;
+        avgLoss = (avgLoss * (period - 1) + loss) / period;
+        out[i] = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+      }
+      return out;
+    }
+
+    function detectCrosses(rsiArr, levels = [30, 50, 70], lookbackClosed = 4) {
+      // Use last 4 closed intervals: transitions ending at indexes len-2, len-3, len-4, len-5
+      const res = [];
+      const lastClosed = rsiArr.length - 2;
+      const start = Math.max(1, lastClosed - lookbackClosed + 1); // earliest end index in window
+      for (let endIdx = start; endIdx <= lastClosed; endIdx++) {
+        const prev = rsiArr[endIdx - 1];
+        const curr = rsiArr[endIdx];
+        if (prev == null || curr == null) continue;
+        for (const L of levels) {
+          const up = prev < L && curr >= L;
+          const down = prev > L && curr <= L;
+          if (up || down) {
+            res.push({
+              level: L,
+              dir: up ? 'up' : 'down',
+              endIndex: endIdx
+            });
+          }
+        }
+      }
+      return res;
+    }
+
+    function daysAgoFromIndex(totalLen, endIndex) {
+      // endIndex is the index of the closed candle where cross finished; last closed is totalLen-2
+      return (totalLen - 2) - endIndex;
+    }
+
+    function tvUrl(base) {
+      const tvSym = `${base}USDT.P`;
+      return `https://www.tradingview.com/chart/?symbol=BINANCE:${encodeURIComponent(tvSym)}`;
+    }
+
+    function binUrl(base) {
+      return `https://www.binance.com/en/futures/${encodeURIComponent(base + 'USDT')}`;
+    }
+
+    async function getBinanceFuturesUSDTPerps() {
+      const data = await fetchJSON('https://fapi.binance.com/fapi/v1/exchangeInfo');
+      const map = new Map();
+      for (const s of data.symbols || []) {
+        if (s.contractType === 'PERPETUAL' && s.quoteAsset === 'USDT' && s.status === 'TRADING') {
+          map.set(s.baseAsset.toUpperCase(), s.symbol);
+        }
+      }
+      return map; // base -> symbol (e.g., BTC -> BTCUSDT)
+    }
+
+    async function getTopCoinsMC1B() {
+      const out = [];
+      for (let page = 1; page <= 5; page++) { // up to 1250 if needed; will stop once below 1B
+        const url = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}`;
+        const pageData = await fetchJSON(url);
+        for (const c of pageData) {
+          if (c.market_cap >= 1_000_000_000) {
+            out.push({
+              id: c.id,
+              symbol: (c.symbol || '').toUpperCase(),
+              name: c.name || c.symbol.toUpperCase(),
+              market_cap: c.market_cap
+            });
+          }
+        }
+        if (pageData.length < 250 || (pageData[pageData.length - 1]?.market_cap ?? 0) < 1_000_000_000) break;
+        // brief pause to be polite to the API
+        await sleep(350);
+      }
+      return out;
+    }
+
+    async function getD1Klines(base) {
+      // Use standard USDT symbol on Futures
+      const symbol = base + 'USDT';
+      const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=120`;
+      const arr = await fetchJSON(url);
+      // arr: [ openTime, open, high, low, close, volume, closeTime, ... ]
+      const closes = arr.map(k => Number(k[4]));
+      const closeTimes = arr.map(k => k[6]);
+      return { closes, closeTimes };
+    }
+
+    function renderRows(items) {
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '';
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="small">No symbols crossed 30/50/70 in the last 4 closed days with MC ≥ $1B.</td></tr>';
+        return;
+      }
+      // Sort by most recent cross, then by market cap desc
+      items.sort((a, b) => (a.recency ?? 99) - (b.recency ?? 99) || (b.market_cap - a.market_cap));
+      for (const r of items) {
+        const statusColor = r.lastRsi >= 50 ? 'var(--good)' : 'var(--bad)';
+        const crossChips = r.crosses.map(c => {
+          const arrow = c.dir === 'up' ? '↑' : '↓';
+          return `<span class="chip">RSI ${c.level}${arrow} ${c.daysAgo}d</span>`;
+        }).join(' ');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>
+            <div class="rowhead">
+              <span class="status" style="background:${statusColor}"></span>
+              <a class="link" href="${tvUrl(r.base)}" target="_blank" rel="noopener noreferrer" title="Open in TradingView">${r.base}USDT</a>
+              <span class="tag">D1</span>
+            </div>
+          </td>
+          <td>${r.name}</td>
+          <td>${fmtUSD0(r.market_cap)}</td>
+          <td>${r.lastRsi?.toFixed(2) ?? '-'}</td>
+          <td>${crossChips || '-'}</td>
+          <td>
+            <a class="bn" href="${tvUrl(r.base)}" target="_blank" rel="noopener noreferrer">TV</a>
+            <a class="bn" href="${binUrl(r.base)}" target="_blank" rel="noopener noreferrer">BN</a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function showError(e) {
+      const div = document.getElementById('err');
+      div.textContent = String(e?.message || e || 'Unknown error');
+    }
+
+    async function run() {
+      showError('');
+      document.getElementById('time').textContent = 'Running...';
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      const tbody = document.getElementById('rows');
+      tbody.innerHTML = '<tr><td colspan="6" class="small">Fetching data...</td></tr>';
+      try {
+        // 1) Get Binance Futures USDT Perpetual bases
+        const futMap = await getBinanceFuturesUSDTPerps(); // base -> symbol
+        // 2) Get top MC coins ≥ $1B
+        const coins = await getTopCoinsMC1B();
+        // 3) Intersect by base symbol
+        const candidates = coins
+          .map(c => ({ base: c.symbol, name: c.name, market_cap: c.market_cap }))
+          .filter(x => futMap.has(x.base));
+        // 4) For each candidate, fetch D1 klines and compute RSI + crosses
+        const limiter = pLimit(8);
+        const results = [];
+        await Promise.all(candidates.map(c => limiter(async () => {
+          try {
+            const { closes } = await getD1Klines(c.base);
+            if (!closes || closes.length < 20) return;
+            const rsiArr = rsi(closes, 14);
+            const crosses = detectCrosses(rsiArr, [30, 50, 70], 4).map(cr => ({
+              level: cr.level,
+              dir: cr.dir,
+              daysAgo: daysAgoFromIndex(rsiArr.length, cr.endIndex)
+            }));
+            if (crosses.length) {
+              const lastClosedIdx = rsiArr.length - 2;
+              results.push({
+                base: c.base,
+                name: c.name,
+                market_cap: c.market_cap,
+                lastRsi: rsiArr[lastClosedIdx],
+                crosses,
+                recency: Math.min(...crosses.map(x => x.daysAgo))
+              });
+            }
+          } catch (e) {
+            // Ignore individual symbol errors to keep scan going
+          }
+        })));
+        renderRows(results);
+      } catch (e) {
+        showError(e);
+      } finally {
+        btn.disabled = false;
+        document.getElementById('time').textContent = 'Updated: ' + nowIso();
+      }
+    }
+
+    document.getElementById('runBtn').addEventListener('click', run);
+  </script>
+</body>
+</html>
